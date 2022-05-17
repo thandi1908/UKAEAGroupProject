@@ -64,7 +64,7 @@ if MODE =="random":
 
 # Get model
 if TYPE == "nregressor":
-    model = NRegressor(len(FLUXES))
+    model = NRegressor(len(FLUXES), device=device)
 elif TYPE =="regressor": 
     model = Regressor(device, scaler, FLUXES[0])
 elif TYPE =="classifier": 
@@ -89,12 +89,12 @@ trained_model, losses = train_model(
 
 # Evaluate Model performance
 logging.debug("Evaluating Model Performance")
-predictions, test_lossses, indices = model.predict(test_dataset,unscale=False)
+predictions, test_lossses, indices = model.predict(test_dataset,fluxes =FLUXES, unscale=False)
 
 output_dict = {
     "metrics": losses,
     "test_losses": test_lossses,
-    "indices": indices
+    # "indices": indices
 }
 
 if MODE =='full': 

@@ -1,3 +1,4 @@
+from ctypes import Union
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -310,10 +311,11 @@ class Regressor(nn.Module):
         return pred, average_loss
 
 class NRegressor(nn.Module):
-    def __init__(self, n):
+    def __init__(self, n_outputs, device='cpu'):
         super().__init__()
         self.type = "nregressor"
-        self.n_outputs = n 
+        self.n_outputs = n_outputs
+        self.device = device
         self.shared_layer = nn.Sequential(
             nn.Linear(15, 512),
             nn.Dropout(p=0.1),
@@ -324,12 +326,12 @@ class NRegressor(nn.Module):
             nn.Linear(256, 128),
             nn.Dropout(p=0.1),
             nn.ReLU()
-        )
+        ).to(self.device)
         
-        self.fluxes_out = [nn.Linear(128,1) for i in range(self.n_outputs)]
+        self.fluxes_out = [nn.Linear(128,1).to(self.device) for i in range(self.n_outputs)]
+        # self.fluxes_out = self.fluxes_out.to(self.device)
     
     def forward(self, x, z, idx=None):
-        
         output_shared = self.shared_layer(x)
         
         outputs = []
@@ -368,6 +370,9 @@ class NRegressor(nn.Module):
         for batch, (X, y, z, idx) in enumerate(
             tqdm(dataloader, desc=f"Epoch {epoch}", disable=disable_tqdm), 0
         ):
+            X = X.to(self.device)
+            z = z.to(self.device)
+            idx = idx.to(self.device)
             batch_size = len(X)
             z_hats, masks = self.forward(X.float(),z)
             
@@ -406,6 +411,8 @@ class NRegressor(nn.Module):
         MSE = nn.MSELoss()
         with torch.no_grad():
             for X, y, z, _ in dataloader:
+                X = X.to(self.device)
+                z = z.to(self.device)
                 
                 z_hats, masks = self.forward(X.float(), z)
                 
@@ -429,13 +436,13 @@ class NRegressor(nn.Module):
 #         print(f"val ind: {ave_ind_loss}")
         return average_loss, ave_ind_loss
 
-    def predict(self, dataloader, unscale=False):
+    def predict(self, dataloader, fluxes, unscale=False):
 
         if not isinstance(dataloader, DataLoader):
             batch_size = min(len(dataloader), 512)
             dataloader = pt.pandas_to_numpy_data(
                 dataloader,
-                regressor_var=self.flux,
+                regressor_var=fluxes,
                 batch_size=batch_size,
                 shuffle=False,
             )  # --- batch size doesnt matter here because it's just prediction
@@ -447,6 +454,8 @@ class NRegressor(nn.Module):
         losses_unscaled = []
         
         for batch, (x, y, z, idx) in enumerate(tqdm(dataloader)):
+            x = x.to(self.device)
+            z = z.to(self.device)
             
             z_hats, masks, idxs = self.forward(x.float(), z, idx=idx)
             
