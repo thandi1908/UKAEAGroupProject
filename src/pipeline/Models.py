@@ -450,6 +450,7 @@ class NRegressor(nn.Module):
         size = len(dataloader.dataset)
         pred = []
         indices = []
+        ind_losses = []
         losses = []
         losses_unscaled = []
         
@@ -462,24 +463,28 @@ class NRegressor(nn.Module):
             pred.append(z_hats)
             MSE = nn.MSELoss()
             loss = 0
+            ind_loss = []
             for i, z_hat in enumerate(z_hats):
                 z_i = z[masks[i]]
                 z_loss = MSE(z_i[:,i].unsqueeze(-1).float(), z_hat)
                 loss += z_loss
+                ind_loss.append(z_loss.item())
                 
             
             if unscale: #TODO: Fix this for the new loss format?
                 losses_unscaled.append(loss[1].item())
                 loss = loss[0]
             losses.append(loss.item())
+            ind_losses.append(ind_loss)
             indices.append(idxs)
             
         average_loss = np.mean(losses)
+        ave_ind_loss = np.mean(ind_losses, axis = 0)
         pred, indices = unpack_outputs(pred, indices)
         if unscale:
             unscaled_avg_loss = np.sum(losses_unscaled) / size
             return pred, average_loss, unscaled_avg_loss, indices
-        return pred, average_loss,indices
+        return pred, average_loss,ave_ind_loss, indices
         
 class ITGDataset(Dataset):
     def __init__(self, X, y, z=None, indices=None):
@@ -676,7 +681,9 @@ def train_model(
         opt = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     losses = []
+    ind_losses = []
     validation_losses = []
+    ind_val_losses = []
     train_accuracy = []
     val_accuracy = []
 
@@ -712,11 +719,13 @@ def train_model(
             stopping_metric = np.asarray(validation_losses)
         # if validation metric is not better than the average of the last n losses then stop
         elif model.type =="nregressor": 
-            loss, _ = model.train_step(train_loader, opt, epoch=epoch)
+            loss, ind_loss = model.train_step(train_loader, opt, epoch=epoch)
             losses.append(loss)
+            ind_losses.append(ind_loss)
 
-            val_loss, _ = model.validation_step(val_loader)
+            val_loss, ind_val_loss = model.validation_step(val_loader)
             validation_losses.append(val_loss)
+            ind_val_losses.append(ind_val_loss)
             
             stopping_metric = np.asarray(validation_losses)
         if len(stopping_metric) > patience:
@@ -747,8 +756,10 @@ def train_model(
     if model.type == "classifier":
         return model, [losses, train_accuracy, validation_losses, val_accuracy]
 
-    elif model.type == "regressor" or model.type =="nregressor":
+    elif model.type == "regressor":
         return model, [losses, validation_losses]
+    elif model.type == "nregressor": 
+        return model, [losses, ind_losses, validation_losses, ind_val_losses]
 
 
 def load_model(model, save_path, device, scaler, flux, dropout):

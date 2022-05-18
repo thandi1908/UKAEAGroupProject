@@ -89,11 +89,12 @@ trained_model, losses = train_model(
 
 # Evaluate Model performance
 logging.debug("Evaluating Model Performance")
-predictions, test_lossses, indices = model.predict(test_dataset,fluxes =FLUXES, unscale=False)
+predictions, test_lossses,ind_losses, indices,  = model.predict(test_dataset,fluxes =FLUXES, unscale=False)
 
 output_dict = {
     "metrics": losses,
     "test_losses": test_lossses,
+    "ind_test_losses": ind_losses
     # "indices": indices
 }
 
